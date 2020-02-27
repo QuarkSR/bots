@@ -105,12 +105,14 @@ const channelsFile = './channels.json';
 		console.log(`${(new Date()).toTimeString()}: [D] Sleep complete.`);
 		for (channel in botChannels)
 		{
-			const uptimeMinutes = await util.getUptimeInMinutes(twitchClient, channel)
-			const uptimeHours = Math.floor(uptimeMinutes / 60);
+			const uptimeTotal = await util.getUptimeInMinutes(twitchClient, channel)
+			const uptimeHours = Math.floor(uptimeTotal / 60);
+			const uptimeMinutesPast = uptimeTotal % 60;
 
 			console.log(`${(new Date()).toTimeString()}: [D] ${channel}.lastUptimeCheck: ${botChannels[channel].lastUptimeCheck}`);
-			console.log(`${(new Date()).toTimeString()}: [D]\t uptimeMinutes: ${uptimeMinutes}`);
+			console.log(`${(new Date()).toTimeString()}: [D]\t uptimeTotal: ${uptimeTotal}`);
 			console.log(`${(new Date()).toTimeString()}: [D]\t uptimeHours: ${uptimeHours}`);
+			console.log(`${(new Date()).toTimeString()}: [D]\t uptimeMinutesPast: ${uptimeMinutesPast}`);
 
 			// first off, this if statement is only true if the stream has been up for less than an hour
 			// aka when the streamer has been streaming for a very short amount of time or, more importantly, goes offline
@@ -122,7 +124,7 @@ const channelsFile = './channels.json';
 
 			// when this if statement is true it means another hour of streaming has passed
 			// thus, we also set lastUptimeCheck to the calculated uptimeHours
-			if (uptimeHours > botChannels[channel].lastUptimeCheck)
+			if (uptimeMinutesPast <= 5 && (uptimeHours > botChannels[channel].lastUptimeCheck))
 			{
 				botChannels[channel].lastUptimeCheck = uptimeHours;
 				if (botChannels[channel].color)
