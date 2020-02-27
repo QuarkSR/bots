@@ -1,6 +1,6 @@
-async function isStreamLive(twitchClient, username)
+async function isStreamLive(twitchClient, channel)
 {
-	var user = await twitchClient.helix.users.getUserByName(username);
+	var user = await twitchClient.helix.users.getUserByName(channel.slice(1));
 	if (!user)
 	{
 		return false;
@@ -8,15 +8,15 @@ async function isStreamLive(twitchClient, username)
 	return await user.getStream() !== null;
 }
 
-exports.getUptimeInMinutes = async function(twitchClient, username)
+exports.getUptimeInMinutes = async function(twitchClient, channel)
 {
-	live = await isStreamLive(twitchClient, username)
+	live = await isStreamLive(twitchClient, channel)
 	if (!live)
 	{
 		return 0;
 	}
 
-	var user = await twitchClient.helix.users.getUserByName(username);
+	var user = await twitchClient.helix.users.getUserByName(channel.slice(1));
 	var data = await user.getStream();
 
 	var start = data.startDate;
@@ -26,16 +26,6 @@ exports.getUptimeInMinutes = async function(twitchClient, username)
 	var uptime = (60 * (diff.getHours() - 1)) + diff.getMinutes()
 
 	return uptime;
-}
-
-exports.checkLastSendTime = function(lastMsgTime)
-{
-	now = new Date();
-	diff = Date.parse(now) - Date.parse(lastMsgTime);
-	diffMs = new Date(diff).getTime();
-	diffMins = Math.floor(diffMs / 1000 / 60);
-
-	return diffMins;
 }
 
 exports.sleep = function(s)

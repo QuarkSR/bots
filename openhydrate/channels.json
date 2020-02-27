@@ -1,0 +1,17 @@
+{
+	"#openhydrate": {
+		"username": "openhydrate",
+		"color": false,
+		"lastUptimeCheck": 0
+	},
+	"#captainsarlo": {
+		"username": "captainsarlo",
+		"color": true,
+		"lastUptimeCheck": 0
+	},
+	"#zziegler": {
+		"name": "zziegler",
+		"color": false,
+		"lastUptimeCheck": 0
+	}
+}
