@@ -1,80 +1,92 @@
 // imports
 const TwitchClient = require('twitch').default;
 const ChatClient = require('twitch-chat-client').default;
-
-const util = require('./util');
 const fs = require('fs-extra');
 
-// setup
+const util = require('./util');
+const tokensFile = './tokens.json';
+
+// wrapped in async to allow for awaits
 (async() =>
 {
-	const tokenData = JSON.parse(await fs.readFile('./tokens.json'));
-
-	// Auto-refresh token data
+	// constant / variable declarations
+	const tokenData = await fs.readJson(tokensFile);
 	const twitchClient = await TwitchClient.withCredentials(tokenData.clientId, tokenData.accessToken, undefined,
-									{
-										clientSecret: tokenData.clientSecret,
-										refreshToken: tokenData.refreshToken,
-										expiry: tokenData.expiryTimestamp === null ? null: new Date(tokenData.expiryTimestamp),
-										onRefresh: async ({accessToken, refreshToken, expiryDate}) =>
-										{
-											const newTokenData =
-											{
-												accessToken,
-												refreshToken,
-												expiryTimestamp: expiryDate === null ? null : expiryDate.getTime()
-											};
-											await fs.writeFile('./tokens.json', JSON.stringify(newTokenData, null, 4), 'UTF-8')
-										}
-									});
-	// channels OpenHydrate will be in
-	var botChannels = ['zziegler', 'openhydrate', 'captainsarlo'];
-	var lastMsgTime = new Date(0);
-	var color = true;
+								{
+									clientSecret: tokenData.clientSecret,
+									expiry: tokenData.expiryTimestamp === null ? null : new Date(tokenData.expiryTimestamp),
+									refreshToken: tokenData.refreshToken,
+									onRefresh: await writeNewData(tokenData)
+								});
 
-	const chatClient = await ChatClient.forTwitchClient(twitchClient, {channels: botChannels});
+	const baseOz = 4;
+	const baseMl = 120;
+
+	//var color = true;
+	var lastUptimeCheck = 0;
+	var botChannels =
+		{
+			zziegler:
+			{
+				name: 'zziegler',
+				color: true,
+				lastUptimeCheck: 0
+			},
+			openhydrate:
+			{
+				name: 'openhydrate',
+				color: true,
+				lastUptimeCheck: 0
+			},
+			captainsarlo:
+			{
+				name: 'captainsarlo',
+				color: true,
+				lastUptimeCheck: 0
+			}
+		}
+
+	const chatClient = await ChatClient.forTwitchClient(twitchClient, {channels: Object.keys(botChannels)});
+
 	await chatClient.connect();
 	console.log(`${(new Date()).toTimeString()}: [+] Connected.`);
+	console.log(`${(new Date()).toTimeString()}: [+] In channels: ${Object.keys(botChannels)}`);
 
-	// on each message
+	// set up listener for privmsgs, used here to implement !commands
 	chatClient.onPrivmsg((channel, user, message) =>
 	{
-		(async() =>
+		const username = channel.slice(1);
+		console.log(`${(new Date()).toTimeString()}: [D] channel: ${channel}`);
+		console.log(`${(new Date()).toTimeString()}: [D] username: ${username}`);
+		if (message.startsWith('!ping'))
 		{
-			if (message === '!ping')
+			console.log(`${(new Date()).toTimeString()}: [D] Received !ping.`)
+			chatClient.say(channel, 'Pong!');
+		}
+
+		if (message.startsWith('!color') || message.startsWith('!colour'))
+		{
+			botChannels[username].color = true;
+			console.log(`${(new Date()).toTimeString()}: [D] color set to ${botChannels[username].color}.`);
+			chatClient.say(channel, `color has been set to ${botChannels[username].color}.`);
+		}
+
+		if (message.startsWith('!nocolor') || message.startsWith('!nocolour'))
+		{
+			botChannels[username].color = false;
+			console.log(`${(new Date()).toTimeString()}: [D] color set to ${botChannels[username].color}.`);
+			chatClient.say(channel, `color has been set to ${botChannels[username].color}.`);
+		}
+
+		// if we directly ask for hydrate, regardless of time since last reminder
+		if (message.startsWith('!hydrate'))
+		{
+			(async() =>
 			{
-				chatClient.say(channel, 'Pong!');
-			}
-
-			if (message === '!color' || message === '!colour')
-			{
-				color = true;
-				console.log(`${(new Date()).toTimeString()}: [D] color set to ${color}.`);
-				chatClient.say(channel, `color has been set to ${color}.`);
-			}
-
-			if (message === '!nocolor' || message === '!nocolour')
-			{
-				color = false;
-				console.log(`${(new Date()).toTimeString()}: [D] color set to ${color}.`);
-				chatClient.say(channel, `color has been set to ${color}.`);
-			}
-
-			// channel has a leading # character so we slice to just get the username
-			var uptime = await util.getUptimeInMinutes(twitchClient, channel.slice(1));
-			var uptimeHours = Math.floor(uptime / 60);
-			var lastSendTime = util.checkLastSendTime(lastMsgTime);
-
-			console.log(`${(new Date()).toTimeString()}: [D] Time since last message: ${lastSendTime} minutes`);
-
-			var baseOz = 4;
-			var baseMl = 120;
-
-			// if we directly ask for hydrate, or automatically every hour (but only if the streamer has been live >= 1 hour and the last message sent by the bot >= 1 hour ago)
-			if (message === '!hydrate' || (uptimeHours > 1 && lastSendTime >= 59))
-			{
-				lastMsgTime = new Date();
-				if (color)
+				uptimeMinutes = await util.getUptimeInMinutes(twitchClient, channel.slice(1));
+				uptimeHours = Math.floor(uptimeMinutes / 60);
+				console.log(`${(new Date()).toTimeString()}: [D] Recieved !hydrate.`);
+				if (botChannels[username].color)
 				{
 					chatClient.action(channel, `You've been live for just over ${uptimeHours} hours. By this point in your broadcast, you should have consumed ${baseOz * uptimeHours}oz (${baseMl * uptimeHours}ml) of water to maintain optimal hydration.`);
 				}
@@ -82,7 +94,59 @@ const fs = require('fs-extra');
 				{
 					chatClient.say(channel, `You've been live for just over ${uptimeHours} hours. By this point in your broadcast, you should have consumed ${baseOz * uptimeHours}oz (${baseMl * uptimeHours}ml) of water to maintain optimal hydration.`);
 				}
-			}
-		})();
+			})();
+		}
 	});
+
+	// callback function for token auto-refresh
+	async function writeNewData(newTokens)
+	{
+		await fs.writeJson(tokensFile, newTokens, {spaces: '\t'});
+	}
+
+	// check whether streamer needs a reminder
+	async function checkNeedsReminder()
+	{
+		console.log(`${(new Date()).toTimeString()}: [D] Sleep over.`);
+		for (username in botChannels)
+		{
+			// irc channel for the user has a # at the start
+			const channel = '#' + username;
+			const uptimeMinutes = await util.getUptimeInMinutes(twitchClient, username)
+			const uptimeHours = Math.floor(uptimeMinutes / 60);
+
+			console.log(`${(new Date()).toTimeString()}: [D] ${username}.lastUptimeCheck: ${botChannels[username].lastUptimeCheck}`);
+			console.log(`${(new Date()).toTimeString()}: [D] uptimeMinutes: ${uptimeMinutes}`);
+			console.log(`${(new Date()).toTimeString()}: [D] uptimeHours: ${uptimeHours}`);
+
+			// first off, this if statement is only true if the stream has been up for less than an hour
+			// aka when the streamer has been streaming for a very short amount of time or, more importantly, goes offline
+			// without this, lastUptimeCheck would never be set back to 0 and that would break everything
+			if (uptimeHours === 0)
+			{
+				botChannels[username].lastUptimeCheck = 0;
+			}
+
+			// when this if statement is true it means another hour of streaming has passed
+			// thus, we also set lastUptimeCheck to the calculated uptimeHours
+			if (uptimeHours > botChannels[username].lastUptimeCheck)
+			{
+				botChannels[username].lastUptimeCheck = uptimeHours;
+				if (color)
+					{
+						chatClient.action(channel, `You've been live for just over ${uptimeHours} hours. By this point in your broadcast, you should have consumed ${baseOz * uptimeHours}oz (${baseMl * uptimeHours}ml) of water to maintain optimal hydration.`);
+					}
+					else
+					{
+						chatClient.say(channel, `You've been live for just over ${uptimeHours} hours. By this point in your broadcast, you should have consumed ${baseOz * uptimeHours}oz (${baseMl * uptimeHours}ml) of water to maintain optimal hydration.`);
+					}
+			}
+		}
+	}
+
+	// main loop; check uptime every 5 minutes
+	while (true)
+	{
+		await util.sleep(5*60).then(result => checkNeedsReminder());
+	}
 })();
