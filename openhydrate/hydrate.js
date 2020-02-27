@@ -5,7 +5,7 @@ const fs = require('fs-extra');
 
 const util = require('./util');
 const modifier = require('./modify-bot-channels');
-const tokensFile = './tokens.json.bak';
+const tokensFile = './tokens.json';
 const channelsFile = './channels.json';
 
 // wrapped in async to allow for awaits
